@@ -86,7 +86,7 @@ float getTokenAsFloat (string inString, int whichToken)
 // only use "correct" scene files.
 //
 //
-void parseSceneFile (char *filnam, camera &cam1, vector<surface*> &surfaceSet, vector<pLight*>& pointLights,  aLight *alPtr, material *lastMaterialLoaded)
+void parseSceneFile (char *filnam, camera &cam1, vector<surface*> &surfaceSet, vector<pLight*>& pointLights,  aLight *alPtr, material *lastMaterialLoaded,  vector<sLight*>& areaLights)
 {
     
     ifstream inFile(filnam);    // open the file
@@ -221,7 +221,7 @@ void parseSceneFile (char *filnam, camera &cam1, vector<surface*> &surfaceSet, v
                 // slightly different from the rest, we need to examine the second param,
                 // which is at the third position on the line:
                 switch (line[2]) {
-                    case 'p':   // point light
+		    case 'p':   // point light
 		    {
 			float x, y ,z ,r ,g, b;
 			x = getTokenAsFloat (line, 2); 
@@ -231,15 +231,15 @@ void parseSceneFile (char *filnam, camera &cam1, vector<surface*> &surfaceSet, v
 			g = getTokenAsFloat (line, 6); 
 			b = getTokenAsFloat (line, 7);
 			myPoint pos(x,y,z);
-			pLight* plPtr = new pLight;
-			plPtr->setPLight(pos, r, g, b);
+			myVector rgb(r, g, b);
+			pLight* plPtr = new pLight(pos, rgb);
 			pointLights.push_back(plPtr);
 			//cout << x << " "<< y << " "<< z << " "<< r << " "<<g << " "<<b<< endl;
 		    }
-                        break;
-                    case 'd':   // directional light
-                        break;
-                    case 'a':   // ambient light
+			break;
+		    case 'd':   // directional light
+			break;
+		    case 'a':   // ambient light
 		    {
 			float r, g ,b;
 			r = getTokenAsFloat (line, 2); 
@@ -247,8 +247,32 @@ void parseSceneFile (char *filnam, camera &cam1, vector<surface*> &surfaceSet, v
 			b= getTokenAsFloat (line, 4);
 			alPtr->setALight(r, g, b);
 		    }
-                        break;
-                        
+			break;
+		     case 's':   // area light
+		    {
+			float x, y ,z , vx, vy, vz, ux, uy, uz, len, r , g, b;
+			x = getTokenAsFloat (line, 2); 
+			y = getTokenAsFloat (line, 3); 
+			z = getTokenAsFloat (line, 4);
+			vx = getTokenAsFloat (line, 5); 
+			vy = getTokenAsFloat (line, 6); 
+			vz = getTokenAsFloat (line, 7);
+			ux = getTokenAsFloat (line, 8); 
+			uy = getTokenAsFloat (line, 9); 
+			uz = getTokenAsFloat (line, 10);
+			len = getTokenAsFloat (line, 11);
+			r = getTokenAsFloat (line, 12); 
+			g = getTokenAsFloat (line, 13); 
+			b = getTokenAsFloat (line, 14);
+			myPoint pos(x,y,z);
+			myVector dir(vx, vy, vz);
+			myVector U(ux, uy, uz);
+			myVector rgb(r, g, b);
+			sLight* slPtr = new sLight(pos, dir,U, len, rgb);
+			areaLights.push_back(slPtr);
+			//cout << x << " "<< y << " "<< z << " "<< r << " "<<g << " "<<b<< endl;
+		    }
+		       break;  
                 }
                 
                 break;

@@ -2,6 +2,10 @@
 #include<iostream>
 #include<cmath>
 #include<algorithm>
+#include<cstdlib>
+#include<ctime>
+#include<vector>
+#include<utility>
 
 using namespace std;
 
@@ -21,7 +25,7 @@ void camera::init(myPoint p, myVector D, float fl, float Iw, float Ih, int nx, i
 	pixelBuffer.resizeErase(ph, pw);
 }
 
-ray* camera::genRay(int xx, int yy){
+ray* camera::genRay(float xx, float yy){
 	float cu = -iw/2.0f+iw*(xx+0.5f)/pw;
 	float cv = -ih/2.0f+ih*(ph-yy+0.5f)/ph;
 	float dirX= -d*w._x+cu*u._x+cv*v._x;
@@ -33,7 +37,9 @@ ray* camera::genRay(int xx, int yy){
 	return retRay;
 }
 
-myVector camera::calculatePixel(ray* rayPtr, int recurse_limit, vector<surface*> &surfaceSet, const vector<pLight*>& pointLights, aLight *alPtr){
+myVector camera::calculatePixel(ray* rayPtr, int recurse_limit, 
+	const vector<surface*> &surfaceSet, const vector<pLight*>& pointLights, 
+	aLight *alPtr, vector<pLight>& lightSpls, vector<myVector>& lightDirs, int num_spls){
 	// check for intersection
 	if(recurse_limit==0) return myVector(0.0f, 0.0f, 0.0f);
 		
@@ -53,10 +59,11 @@ myVector camera::calculatePixel(ray* rayPtr, int recurse_limit, vector<surface*>
 	myVector km = target->getMaterial().getIdealSpec();
 	
 	// ambient light
-	myVector Ia = alPtr->getColorVector();
+	myVector Ia = alPtr->getColorVector()/num_spls;
 	myVector La = kd*Ia;
 	myVector result = La;
 	
+	// point light
 	for(size_t i=0; i<pointLights.size(); ++i){
 		// check shadow
 		myVector shadVec = pointLights[i]->getPos() - data->itrPt;
@@ -76,6 +83,8 @@ myVector camera::calculatePixel(ray* rayPtr, int recurse_limit, vector<surface*>
 			myVector I = pointLights[i]->getColorVector();
 			myVector Ld = kd*I;
 			myVector li = pointLights[i]->getPos() - data->itrPt;
+			float length = li.getNorm();
+			
 			li = li.getUnitVec();
 			float dot1 = data->n.dot(li);
 			Ld*=max(dot1,0.0f);
@@ -88,6 +97,48 @@ myVector camera::calculatePixel(ray* rayPtr, int recurse_limit, vector<surface*>
 			Ls*=max(0.0f, pow(dot2, p));
 			
 			result+=Ld+Ls;
+			result/=(length*length);
+		}
+	}
+	// Area light samples
+	for(size_t i=0; i<lightSpls.size(); ++i){
+		// check shadow
+		myVector shadVec = lightSpls[i].getPos() - data->itrPt;
+		float tmax =  shadVec.getNorm();
+		shadVec = shadVec.getUnitVec();
+		ray* shadRay = new ray(data->itrPt+shadVec*0.05f, shadVec);
+		bool isblocked = false;
+		for(int j=0; j<(int)surfaceSet.size(); ++j){
+			if(j!=data->sf_id)
+				surfaceSet[j]->intersect(shadRay, j);
+		}
+		if(shadRay->detectBlock(tmax))
+			isblocked = true;
+		
+		if(!isblocked){
+			// diffuse light
+			myVector I = lightSpls[i].getColorVector();
+			myVector Ld = kd*I;
+			myVector li = lightSpls[i].getPos() - data->itrPt;
+			float length = li.getNorm();
+			
+			li = li.getUnitVec();
+			float dot1 = data->n.dot(li);
+			Ld*=max(dot1,0.0f);
+			// specular light
+			myVector Ls = ks*I;
+			myVector h = data->v+li;
+			h = h.getUnitVec();
+			float dot2 = data->n.dot(h);
+			float p = target->getMaterial().getPhongExp();
+			Ls*=max(0.0f, pow(dot2, p));
+			// normalize light intensity
+			float cos1 = dot1/(data->n.getNorm()*li.getNorm());
+			float dot3 = lightDirs[i].dot(li*-1.0f);
+			float cos2 = dot3/(lightDirs[i].getNorm()*li.getNorm());
+			result+=Ld+Ls;
+			result*=(cos1*cos2);
+			result/=(length*length);
 		}
 	}
 	
@@ -97,18 +148,64 @@ myVector camera::calculatePixel(ray* rayPtr, int recurse_limit, vector<surface*>
 		myVector reflecDir = data->n*(2.0f*data->n.dot(data->v)) - data->v;
 		myPoint reflecPt = data->itrPt + reflecDir*0.05f;
 		ray* reflecRay = new ray(reflecPt, reflecDir);
-		return result+km*calculatePixel(reflecRay, recurse_limit-1, surfaceSet, pointLights, alPtr);
+		return result+km*calculatePixel(reflecRay, recurse_limit-1, surfaceSet, pointLights, alPtr, lightSpls, lightDirs, num_spls);
 	}
 	
 }
 
-void camera::renderScene(vector<surface*> &surfaceSet, const vector<pLight*>& pointLights, aLight *alPtr){
+void shuffle(vector<pair<float,float> > &s){
+	size_t n = s.size();
+	for(size_t i=0; i<n; ++i){
+		size_t j = i+rand()%(n-i);
+		pair<float, float> tmp = s[i];
+		s[i]=s[j];
+		s[j] = tmp;
+	}
+	return;
+}
+
+void camera::renderScene(vector<surface*> &surfaceSet, const vector<pLight*>& pointLights, 
+	aLight *alPtr, vector<sLight *> &areaLights, const int N1, const int N2){
+	
+	srand(time(0));
+	int recurse_limit = 5;
+	float scale = (float)RAND_MAX+1.0f;
+	int num_samplepts = N1*N1;
+	int num_shadows = N2*N2;
+	
 	for(int j=0; j<ph; ++j){
 		for(int i=0; i<pw; ++i){
-			ray* currentRay = genRay(i, j);
 			Rgba &px = pixelBuffer[j][i];
-			int recurse_limit = 5;
-			myVector result = calculatePixel(currentRay, recurse_limit, surfaceSet, pointLights, alPtr);
+			myVector result(0.0f, 0.0f, 0.0f);
+			vector<pair<float,float> > r;
+			vector<pair<float,float> > s;
+			//Generate pixel samples
+			for(int p=0; p<N1; ++p){
+				for(int q=0; q<N1; ++q){
+					r.push_back(make_pair((p+(float)rand()/scale)/N1, (q+(float)rand()/scale)/N1));
+				}
+			}
+			
+			for(int k=0; k<num_samplepts; ++k){
+				ray* currentRay = genRay((float)i-0.5f+r[k].first , (float)j-0.5f+r[k].second); 
+				// shadow ray samples
+				for(int p=0; p<N2; ++p){
+					for(int q=0; q<N2; ++q){
+						s.push_back(make_pair((p+(float)rand()/scale)/N2, (q+(float)rand()/scale)/N2));
+					}
+				}
+				shuffle(s);
+				
+				for(int m=0; m<num_shadows; ++m){
+					vector<pLight> lightSpls;
+					vector<myVector> lightDirs;
+					for(size_t al=0; al<areaLights.size(); ++al){
+						lightSpls.push_back(areaLights[al]->getSample(s[m].first, s[m].second));
+						lightDirs.push_back(areaLights[al]->getDir());
+					}
+					result += calculatePixel(currentRay, recurse_limit, surfaceSet, pointLights, alPtr, lightSpls, lightDirs, num_samplepts);
+				}
+			}
 			px.r = result[0];
 			px.g = result[1];
 			px.b = result[2];

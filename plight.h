@@ -7,17 +7,16 @@ class pLight{
 	public:
 		pLight(){
 			position = myPoint(0.0f, 0.0f, 0.0f);
-			color[0] = 0.0f;
-			color[1] = 0.0f;
-			color[2] = 0.0f;
-			intensity = 0.0f;
+			color = myVector(0.0f, 0.0f, 0.0f);
+			//intensity = 0.0f;
 		}
-		void setPLight(myPoint pt, float r, float g, float b);
-		myVector getColorVector();
+		pLight(myPoint pt, myVector rgb):position(pt), color(rgb){}
+		myVector getColorVector(){return color;}
 		myPoint getPos(){return position;}
 	private:
 		myPoint position;
-		float color[3];
-		float intensity;
+		myVector color;
+		//float intensity;
 };
+
 #endif

@@ -16,6 +16,8 @@ class myVector{
 		const myVector operator-(const myVector &vec) const;
 		myVector& operator*=(const float scale);
 		const myVector operator*(const float scale);
+		myVector& operator/=(const float scale);
+		const myVector operator/(const float scale);
 		const myVector operator*(const myVector &vec);
 		float operator[](const int i) const;
 		friend class myPoint;

@@ -55,6 +55,17 @@ const myVector myVector::operator*(const float scale){
 	return myVector(*this) *= scale;
 }
 
+myVector& myVector::operator/=(const float scale){
+	_x /= scale;
+	_y /= scale;
+	_z /= scale;
+	return (*this);
+}
+
+const myVector myVector::operator/(const float scale){
+	return myVector(*this) /= scale;
+}
+
 const myVector myVector::operator*(const myVector &vec){
 	float x = _x*vec._x;
 	float y = _y*vec._y;
